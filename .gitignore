@@ -228,9 +228,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Thermoplan out
-history.json
-collections.json
-fantasy.json
-prompt.md
