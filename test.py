@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Example script for cookidoo-api."""
-import os, aiohttp, asyncio
+import os, json, aiohttp, asyncio
 from dotenv import load_dotenv
+
+from datetime import datetime, timedelta
 
 from cookidoo_api import Cookidoo
 from cookidoo_api.helpers import (
@@ -16,6 +18,8 @@ from cookidoo_api.types import (
 )
 
 load_dotenv()
+
+HISTORY_FILE = "recipe_history.jsonl"
 
 async def main():
     """Run main example function."""
@@ -55,6 +59,50 @@ async def main():
         # Info
         subscription = await cookidoo.get_active_subscription()
 
-        print(subscription)
+        # One record per planned day, the sample unit for the meal planner
+        days = []
+
+        today = datetime.today().date()
+        for y in range(3):
+            print(y)
+            start_date = today - timedelta(days = 386+365*y)
+            end_date = today - timedelta(days = 344+365*y)
+
+            # Snap to Monday boundaries so full weeks are covered
+            date = start_date - timedelta(days=start_date.weekday())          # previous (or same) Monday
+            end_date = end_date - timedelta(days=end_date.weekday()) + timedelta(weeks=1)  # next Monday after end_date's week
+
+            while date < end_date:
+                print(date)
+
+                # Returns only the days of that week which have entries
+                for calday in await cookidoo.get_recipes_in_calendar_week(date):
+                    day = datetime.strptime(calday.id, "%Y-%m-%d").date()
+                    days.append(
+                        {
+                            "date": calday.id,
+                            "weekday": day.strftime("%A"),
+                            "recipes": [
+                                {
+                                    "id": recipe.id,
+                                    "name": recipe.name,
+                                    "minutes": round(float(recipe.total_time) / 60)
+                                    if recipe.total_time
+                                    else None,
+                                    "url": recipe.url,
+                                }
+                                for recipe in calday.recipes
+                            ],
+                            "custom_recipe_ids": calday.customer_recipe_ids,
+                        }
+                    )
+                date+=timedelta(weeks=1)
+
+        days.sort(key=lambda day: day["date"])
+        with open(HISTORY_FILE, "w") as f:
+            for day in days:
+                f.write(json.dumps(day, ensure_ascii=False) + "\n")
+        print(f"wrote {len(days)} days to {HISTORY_FILE}")
+        
 
 asyncio.run(main())
