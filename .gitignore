@@ -1,3 +1,15 @@
+# Node / frontend
+node_modules/
+dev-dist/
+
+# Firebase CLI standalone binary + local artifacts
+firebase-tools-linux
+firebase-debug.log
+.firebase/
+
+# Cookidoo session cookies
+.cookies
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -216,3 +228,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Thermoplan out
+history.json
+collections.json
+fantasy.json
+prompt.md
