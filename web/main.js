@@ -1,5 +1,6 @@
 import './style.css'
 import { registerSW } from 'virtual:pwa-register'
+import { apiHeaders } from './firebase.js'
 
 registerSW({ immediate: true })
 
@@ -30,7 +31,10 @@ btn.addEventListener('click', async () => {
   statusEl.textContent = 'Fetching from Cookidoo… this can take ~30s'
 
   try {
-    const res = await fetch('/api/prepare', { method: 'POST' })
+    const res = await fetch('/api/prepare', {
+      method: 'POST',
+      headers: await apiHeaders(),
+    })
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
 
