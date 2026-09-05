@@ -11,7 +11,7 @@ jobs:
   build_and_preview:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: npm ci && npm run build
       # Preview deploy needs the service-account secret, which GitHub withholds
       # from Dependabot and cross-fork PRs. Skip it there - the build above is
