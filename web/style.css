@@ -87,6 +87,26 @@ button + .note {
   margin-top: 12px;
 }
 
+.note:empty {
+  display: none;
+}
+
+.who {
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.link {
+  width: auto;
+  padding: 0;
+  background: none;
+  color: var(--green);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .shell:has(#out:not([hidden])) {
   max-width: 620px;
 }

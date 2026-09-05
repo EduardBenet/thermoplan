@@ -4,13 +4,15 @@ Each planning step is its own module (``prepare`` now; ``generate`` and ``save``
 to come) and gets a thin HTTP wrapper here.
 
 The functions are public at the Cloud Run level (Firebase Hosting's rewrite proxy
-cannot authenticate to a private 2nd-gen function), but every request must carry
-a valid Firebase App Check token, so in practice only the real PWA can call them.
+cannot authenticate to a private 2nd-gen function). Access control is in code:
+every request must carry a Firebase ID token for a Google account whose verified
+email is on the ``ALLOWED_EMAILS`` list.
 """
 import asyncio
 import json
+import os
 
-from firebase_admin import app_check, initialize_app
+from firebase_admin import auth, initialize_app
 from firebase_functions import https_fn, options
 from firebase_functions.options import set_global_options
 
@@ -25,21 +27,21 @@ set_global_options(region="europe-west1", max_instances=1)
 
 
 @https_fn.on_request(
-    secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD"],
+    secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD", "ALLOWED_EMAILS"],
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
-    cors=options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]),
 )
 def prepare(req: https_fn.Request) -> https_fn.Response:
     """Fetch next week's Cookidoo planning inputs and return them as JSON.
 
-    Optional ``fantasy`` count (query string or JSON body), default 3. The
-    response is the dict from ``gather_planning_inputs`` - history, collections,
-    fantasy, and the built prompt - ready to hand to the ``generate`` step.
+    Requires ``Authorization: Bearer <Firebase ID token>`` for an allowed
+    account. Optional ``fantasy`` count (query string or JSON body), default 3.
+    The response is the dict from ``gather_planning_inputs`` - history,
+    collections, fantasy, and the built prompt - ready for the ``generate`` step.
     """
     if req.method not in ("GET", "POST"):
         return https_fn.Response("Method not allowed", status=405)
-    if (denied := _check_app_check(req)) is not None:
+    if (denied := _check_caller(req)) is not None:
         return denied
 
     try:
@@ -56,18 +58,28 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
     )
 
 
-def _check_app_check(req: https_fn.Request) -> https_fn.Response | None:
-    """Reject the request unless it carries a valid App Check token.
+def _check_caller(req: https_fn.Request) -> https_fn.Response | None:
+    """Reject the request unless it is a signed-in, allow-listed Google account.
 
-    Returns a 401 ``Response`` to send back, or ``None`` when the token is good.
+    Returns a ``Response`` to send back, or ``None`` when the caller is good.
     """
-    token = req.headers.get("X-Firebase-AppCheck")
+    header = req.headers.get("Authorization", "")
+    token = header[7:] if header.startswith("Bearer ") else None
     if not token:
-        return https_fn.Response("Missing App Check token", status=401)
+        return https_fn.Response("Missing bearer token", status=401)
     try:
-        app_check.verify_token(token)
+        claims = auth.verify_id_token(token)
     except Exception:
-        return https_fn.Response("Invalid App Check token", status=401)
+        return https_fn.Response("Invalid token", status=401)
+
+    allowed = {
+        e.strip().lower()
+        for e in os.environ.get("ALLOWED_EMAILS", "").split(",")
+        if e.strip()
+    }
+    email = (claims.get("email") or "").lower()
+    if not claims.get("email_verified") or email not in allowed:
+        return https_fn.Response("Not authorised", status=403)
     return None
 
 

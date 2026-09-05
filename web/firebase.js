@@ -1,37 +1,45 @@
-// Firebase web setup — App Check only, for now.
+// Firebase web setup — Auth only, for now.
 //
 // These values are NOT secret: they identify the project, they don't grant
-// access. Copy them from Firebase console -> Project settings -> General ->
-// "Your apps" -> SDK setup and configuration.
+// access. From Firebase console -> Project settings -> General -> "Your apps".
 import { initializeApp } from 'firebase/app'
-import { initializeAppCheck, ReCaptchaV3Provider, getToken } from 'firebase/app-check'
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+} from 'firebase/auth'
 
 const firebaseConfig = {
-  apiKey: 'TODO-from-console',
+  apiKey: 'AIzaSyAV0yHB3eDYKJsCBBNxdVE6Hmq3oZkqA2s',
   authDomain: 'thermoplan-benetmilian.firebaseapp.com',
   projectId: 'thermoplan-benetmilian',
-  appId: 'TODO-from-console',
-}
-
-// reCAPTCHA v3 site key: Firebase console -> App Check -> your web app -> reCAPTCHA v3.
-const RECAPTCHA_V3_SITE_KEY = 'TODO-from-console'
-
-// On `npm run dev` reCAPTCHA can't attest localhost. This prints a debug token
-// to the browser console on first load; register it under App Check -> Manage
-// debug tokens so local calls are accepted.
-if (import.meta.env.DEV) {
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  storageBucket: 'thermoplan-benetmilian.firebasestorage.app',
+  messagingSenderId: '83995178357',
+  appId: '1:83995178357:web:7238e8f3fb7cb4d921cf3c',
 }
 
 const app = initializeApp(firebaseConfig)
+const auth = getAuth(app)
+const provider = new GoogleAuthProvider()
 
-const appCheck = initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider(RECAPTCHA_V3_SITE_KEY),
-  isTokenAutoRefresh: true,
-})
+/** Subscribe to sign-in state. Calls back with a User, or null when signed out. */
+export function onUser(cb) {
+  return onAuthStateChanged(auth, cb)
+}
 
-/** Headers that make an /api/* call pass the function's App Check gate. */
-export async function apiHeaders() {
-  const { token } = await getToken(appCheck)
-  return { 'X-Firebase-AppCheck': token }
+export function signIn() {
+  return signInWithPopup(auth, provider)
+}
+
+export function signOutUser() {
+  return signOut(auth)
+}
+
+/** Authorization header for an /api/* call. Throws if not signed in. */
+export async function authHeaders() {
+  const user = auth.currentUser
+  if (!user) throw new Error('Not signed in')
+  return { Authorization: `Bearer ${await user.getIdToken()}` }
 }
