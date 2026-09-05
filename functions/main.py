@@ -2,14 +2,21 @@
 
 Each planning step is its own module (``prepare`` now; ``generate`` and ``save``
 to come) and gets a thin HTTP wrapper here.
+
+The functions are public at the Cloud Run level (Firebase Hosting's rewrite proxy
+cannot authenticate to a private 2nd-gen function), but every request must carry
+a valid Firebase App Check token, so in practice only the real PWA can call them.
 """
 import asyncio
 import json
 
+from firebase_admin import app_check, initialize_app
 from firebase_functions import https_fn, options
 from firebase_functions.options import set_global_options
 
 from prepare import gather_planning_inputs
+
+initialize_app()
 
 # europe-west1: the user and Cookidoo are both in Europe, and ``prepare`` makes
 # ~20 sequential Cookidoo round-trips. max_instances caps a runaway at pennies.
@@ -32,6 +39,8 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
     """
     if req.method not in ("GET", "POST"):
         return https_fn.Response("Method not allowed", status=405)
+    if (denied := _check_app_check(req)) is not None:
+        return denied
 
     try:
         data = asyncio.run(gather_planning_inputs(_fantasy_count(req)))
@@ -45,6 +54,21 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
         json.dumps(data, ensure_ascii=False),
         content_type="application/json; charset=utf-8",
     )
+
+
+def _check_app_check(req: https_fn.Request) -> https_fn.Response | None:
+    """Reject the request unless it carries a valid App Check token.
+
+    Returns a 401 ``Response`` to send back, or ``None`` when the token is good.
+    """
+    token = req.headers.get("X-Firebase-AppCheck")
+    if not token:
+        return https_fn.Response("Missing App Check token", status=401)
+    try:
+        app_check.verify_token(token)
+    except Exception:
+        return https_fn.Response("Invalid App Check token", status=401)
+    return None
 
 
 def _fantasy_count(req: https_fn.Request) -> int:
