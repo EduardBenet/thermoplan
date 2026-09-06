@@ -166,15 +166,24 @@ function wire() {
     .addEventListener('click', () => (state.phase === 'idle' ? fetchInputs() : generate()))
 }
 
+async function apiPost(path, body) {
+  // On 403, the ID token may just be stale (access granted after sign-in) -
+  // force a fresh token and retry once.
+  for (const force of [false, true]) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { ...(await authHeaders(force)), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.status !== 403 || force) return res
+  }
+}
+
 async function fetchInputs() {
   set({ busy: true })
   status('Fetching from Cookidoo… this can take ~30s')
   try {
-    const res = await fetch('/api/prepare', {
-      method: 'POST',
-      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
-      body: JSON.stringify(state.settings),
-    })
+    const res = await apiPost('/api/prepare', state.settings)
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
     const d = JSON.parse(text)
@@ -191,15 +200,11 @@ async function generate() {
   status('Asking the model… this can take ~30s')
   try {
     const d = state.inputs
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: state.prompt,
-        history: d.history,
-        collections: d.collections,
-        already_planned: d.already_planned,
-      }),
+    const res = await apiPost('/api/generate', {
+      prompt: state.prompt,
+      history: d.history,
+      collections: d.collections,
+      already_planned: d.already_planned,
     })
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)

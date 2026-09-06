@@ -30,4 +30,13 @@ def generate_menu(prompt, history, collections, already_planned):
         ]
     )
     resp = client.models.generate_content(model=MODEL, contents=contents)
-    return resp.text
+    if resp.text:
+        return resp.text
+
+    # No text part - safety block, recitation, token limit, ...
+    reason = None
+    try:
+        reason = resp.candidates[0].finish_reason
+    except (AttributeError, IndexError, TypeError):
+        pass
+    raise RuntimeError(f"the model returned no menu (finish_reason={reason})")

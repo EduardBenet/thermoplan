@@ -5,12 +5,11 @@ to come) and gets a thin HTTP wrapper here.
 
 The functions are public at the Cloud Run level (Firebase Hosting's rewrite proxy
 cannot authenticate to a private 2nd-gen function). Access control is in code:
-every request must carry a Firebase ID token for a Google account whose verified
-email is on the ``ALLOWED_EMAILS`` list.
+every request must carry a Firebase ID token for a Google account that has the
+``access`` custom claim (granted with ``set_access.py``).
 """
 import asyncio
 import json
-import os
 
 from firebase_admin import auth, initialize_app
 from firebase_functions import https_fn, options
@@ -28,11 +27,11 @@ set_global_options(region="europe-west1", max_instances=1)
 
 
 @https_fn.on_request(
-    secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD", "ALLOWED_EMAILS"],
+    secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD"],
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
     # Cloud Run must accept the unauthenticated call from Hosting's rewrite proxy;
-    # _check_caller does the real access control (allow-listed Firebase token).
+    # _check_caller does the real access control (Firebase token + access claim).
     invoker="public",
 )
 def prepare(req: https_fn.Request) -> https_fn.Response:
@@ -64,7 +63,7 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
 
 
 @https_fn.on_request(
-    secrets=["ALLOWED_EMAILS", "GEMINI_API_KEY"],
+    secrets=["GEMINI_API_KEY"],
     timeout_sec=180,
     memory=options.MemoryOption.MB_512,
     invoker="public",
@@ -105,7 +104,12 @@ def generate(req: https_fn.Request) -> https_fn.Response:
 
 
 def _check_caller(req: https_fn.Request) -> https_fn.Response | None:
-    """Reject the request unless it is a signed-in, allow-listed Google account.
+    """Reject the request unless it carries a valid ID token with ``access``.
+
+    ``check_revoked`` makes a disabled account or a revoked session lose access
+    immediately rather than at token expiry. The ``access`` custom claim is
+    granted per user with ``set_access.py`` - the policy lives in Firebase Auth,
+    not in an env var.
 
     Returns a ``Response`` to send back, or ``None`` when the caller is good.
     """
@@ -114,17 +118,11 @@ def _check_caller(req: https_fn.Request) -> https_fn.Response | None:
     if not token:
         return https_fn.Response("Missing bearer token", status=401)
     try:
-        claims = auth.verify_id_token(token)
+        claims = auth.verify_id_token(token, check_revoked=True)
     except Exception:
         return https_fn.Response("Invalid token", status=401)
 
-    allowed = {
-        e.strip().lower()
-        for e in os.environ.get("ALLOWED_EMAILS", "").split(",")
-        if e.strip()
-    }
-    email = (claims.get("email") or "").lower()
-    if not claims.get("email_verified") or email not in allowed:
+    if not claims.get("access"):
         return https_fn.Response("Not authorised", status=403)
     return None
 

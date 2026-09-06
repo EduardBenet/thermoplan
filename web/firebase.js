@@ -37,9 +37,10 @@ export function signOutUser() {
   return signOut(auth)
 }
 
-/** Authorization header for an /api/* call. Throws if not signed in. */
-export async function authHeaders() {
+/** Authorization header for an /api/* call. Throws if not signed in.
+ *  Pass force=true to get a freshly-minted token (e.g. after access was granted). */
+export async function authHeaders(force = false) {
   const user = auth.currentUser
   if (!user) throw new Error('Not signed in')
-  return { Authorization: `Bearer ${await user.getIdToken()}` }
+  return { Authorization: `Bearer ${await user.getIdToken(force)}` }
 }
