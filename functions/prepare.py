@@ -6,17 +6,12 @@ from the environment only, and the Cookidoo session is established fresh on each
 call - the deployed function has a read-only filesystem, so there is no cookie
 file to reuse. ``gather_planning_inputs`` is the single entry point.
 """
-import os
 import re
 import html
 
-import aiohttp
-
 from datetime import datetime, timedelta
 
-from cookidoo_api import Cookidoo
-from cookidoo_api.helpers import get_localization_options
-from cookidoo_api.types import CookidooConfig
+from cookidoo_client import cookidoo_client
 
 # Defaults - the request can override each of these.
 YEARS_BACK = 3        # how many previous years to look at
@@ -367,21 +362,7 @@ async def gather_planning_inputs(
     """
     fantasy_count = max(0, int(fantasy_count))
 
-    jar = aiohttp.CookieJar(unsafe=True)
-    async with aiohttp.ClientSession(cookie_jar=jar) as session:
-        cookidoo = Cookidoo(
-            session,
-            cfg=CookidooConfig(
-                email=os.environ["COOKIDOO_EMAIL"],
-                password=os.environ["COOKIDOO_PASSWORD"],
-                localization=(
-                    await get_localization_options(country="ie", language="en-GB")
-                )[0],
-            ),
-        )
-        await cookidoo.login()
-        await cookidoo.get_user_info()
-
+    async with cookidoo_client() as (cookidoo, session):
         today = datetime.today().date()
         monday = next_monday(today, weeks_ahead)
 

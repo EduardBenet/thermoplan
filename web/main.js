@@ -112,6 +112,11 @@ function signedIn() {
     }
 
     ${state.menu ? gallery(state.menu) : ''}
+    ${
+      state.menu
+        ? `<button id="push" type="button"${state.busy ? ' disabled' : ''}>Push to Cookidoo calendar</button>`
+        : ''
+    }
   `
 }
 
@@ -206,6 +211,79 @@ function wire() {
   document
     .querySelector('#primary')
     .addEventListener('click', () => (state.phase === 'idle' ? fetchInputs() : generate()))
+
+  document.querySelector('#push')?.addEventListener('click', pushToCalendar)
+}
+
+function norm(s) {
+  return String(s)
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip accents
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Resolve each gallery entry to a real Cookidoo recipe id, using the datasets
+ *  we fetched. Returns { days: [{date, recipe_ids}], unresolved: [labels] }. */
+function resolveMenu() {
+  const byName = new Map()
+  const known = new Set()
+  const add = (id, name) => {
+    if (!id) return
+    known.add(String(id))
+    if (name) byName.set(norm(name), String(id))
+  }
+  const d = state.inputs
+  d.already_planned.forEach((day) => day.recipes.forEach((r) => add(r.id, r.name)))
+  d.history.forEach((day) => day.recipes.forEach((r) => add(r.id, r.name)))
+  d.collections.forEach((r) => add(r.id, r.name))
+
+  const byDate = {}
+  const unresolved = []
+  for (const day of state.menu.days) {
+    for (const m of day.meals || []) {
+      let id = m.recipe_id && String(m.recipe_id).trim()
+      if (!id || !known.has(id)) id = byName.get(norm(m.recipe_name)) || null
+      if (id) (byDate[day.date] ||= []).push(id)
+      else unresolved.push(`${day.weekday} — ${m.recipe_name}`)
+    }
+  }
+  return {
+    days: Object.entries(byDate).map(([date, recipe_ids]) => ({ date, recipe_ids })),
+    unresolved,
+  }
+}
+
+async function pushToCalendar() {
+  const { days, unresolved } = resolveMenu()
+  const count = days.reduce((n, x) => n + x.recipe_ids.length, 0)
+  if (!count) {
+    status('Nothing to push — no recipes could be matched to Cookidoo ids')
+    return
+  }
+
+  let msg = `Add ${count} recipe(s) to the Cookidoo calendar?`
+  if (unresolved.length)
+    msg += `\n\nSkipped (no Cookidoo id):\n- ${unresolved.join('\n- ')}`
+  if (!confirm(msg)) return
+
+  set({ busy: true })
+  status('Pushing to Cookidoo…')
+  try {
+    const res = await apiPost('/api/save', { days })
+    const text = await res.text()
+    if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
+    const r = JSON.parse(text)
+    set({ busy: false })
+    const bits = [`added ${r.added}`, `${r.already_there} already there`]
+    if (r.unsupported.length) bits.push(`${r.unsupported.length} unsupported`)
+    status(bits.join(' · '))
+  } catch (e) {
+    set({ busy: false })
+    status(`Failed — ${e.message}`)
+  }
 }
 
 function removeEntry(id) {

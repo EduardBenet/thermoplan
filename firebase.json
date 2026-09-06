@@ -38,6 +38,13 @@
         }
       },
       {
+        "source": "/api/save",
+        "function": {
+          "functionId": "save",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

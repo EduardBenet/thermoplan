@@ -17,6 +17,7 @@ from firebase_functions.options import set_global_options
 
 from generate import generate_menu
 from prepare import gather_planning_inputs
+from save import save_menu
 
 initialize_app()
 
@@ -99,6 +100,40 @@ def generate(req: https_fn.Request) -> https_fn.Response:
 
     return https_fn.Response(
         json.dumps({"menu": menu}, ensure_ascii=False),
+        content_type="application/json; charset=utf-8",
+    )
+
+
+@https_fn.on_request(
+    secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD"],
+    timeout_sec=120,
+    memory=options.MemoryOption.MB_512,
+    invoker="public",
+)
+def save(req: https_fn.Request) -> https_fn.Response:
+    """Write the finalised menu into the Cookidoo calendar (add-only).
+
+    POST body: ``days`` - ``[{"date": "YYYY-MM-DD", "recipe_ids": [...]}, ...]``.
+    Returns ``{"added", "already_there", "unsupported", "days"}``.
+    """
+    if req.method != "POST":
+        return https_fn.Response("Method not allowed", status=405)
+    if (denied := _check_caller(req)) is not None:
+        return denied
+
+    days = (req.get_json(silent=True) or {}).get("days")
+    if not isinstance(days, list) or not days:
+        return https_fn.Response("Missing days", status=400)
+
+    try:
+        result = asyncio.run(save_menu(days))
+    except KeyError as err:
+        return https_fn.Response(f"Missing configuration: {err}", status=500)
+    except Exception as err:
+        return https_fn.Response(f"Save failed: {err}", status=502)
+
+    return https_fn.Response(
+        json.dumps(result, ensure_ascii=False),
         content_type="application/json; charset=utf-8",
     )
 

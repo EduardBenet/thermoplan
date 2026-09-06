@@ -370,3 +370,7 @@ button + .note {
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+#push {
+  margin-top: 18px;
+}
