@@ -62,9 +62,11 @@ def parse_duration(text):
     return (int(hours.group(1)) * 60 if hours else 0) + (int(mins.group(1)) if mins else 0) or None
 
 
-def next_monday(today):
-    """The Monday that starts the week we are planning."""
-    return today + timedelta(days=7 - today.weekday())
+def next_monday(today, weeks_ahead=1):
+    """The Monday that starts the week we are planning (1 = next week, 2 = the
+    week after, ...)."""
+    coming_monday = today + timedelta(days=7 - today.weekday())
+    return coming_monday + timedelta(weeks=weeks_ahead - 1)
 
 
 async def fetch_history(cookidoo, target_monday, years_back=YEARS_BACK, window_weeks=WINDOW_WEEKS):
@@ -346,6 +348,7 @@ async def gather_planning_inputs(
     window_weeks=WINDOW_WEEKS,
     max_minutes=MAX_MINUTES,
     collection=COLLECTION,
+    weeks_ahead=1,
 ):
     """Fetch everything next week's menu is built from and return it as data.
 
@@ -373,7 +376,7 @@ async def gather_planning_inputs(
         await cookidoo.get_user_info()
 
         today = datetime.today().date()
-        monday = next_monday(today)
+        monday = next_monday(today, weeks_ahead)
 
         history = await fetch_history(cookidoo, monday, years_back, window_weeks)
         collections = await fetch_collections(cookidoo, collection)
@@ -382,6 +385,7 @@ async def gather_planning_inputs(
 
     return {
         "week_of": monday.isoformat(),
+        "weeks_ahead": weeks_ahead,
         "fantasy_count": fantasy_count,
         "years_back": years_back,
         "window_weeks": window_weeks,

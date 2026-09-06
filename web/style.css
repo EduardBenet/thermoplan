@@ -47,6 +47,24 @@ body {
   text-align: center;
 }
 
+.topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 30px;
+  margin-bottom: 16px;
+}
+
+.topbar .who {
+  margin: 0;
+}
+
+.topbar .signin {
+  width: auto;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
 .mark img {
   display: block;
   margin: 0 auto 16px;
@@ -142,6 +160,30 @@ button + .note {
 .counts li {
   padding: 6px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.week {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.week select,
+.settings select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
 }
 
 .settings {

@@ -39,10 +39,10 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
     """Fetch next week's Cookidoo planning inputs and return them as JSON.
 
     Requires ``Authorization: Bearer <Firebase ID token>`` for an allowed
-    account. Optional planning knobs (query string or JSON body):
-    ``fantasy_count``, ``years_back``, ``window_weeks``, ``max_minutes``,
-    ``collection``. The response is the dict from ``gather_planning_inputs`` -
-    history, collections, fantasy, and the built prompt - for the ``generate`` step.
+    account. Optional planning knobs (query string or JSON body): ``weeks_ahead``
+    (1 = next week), ``fantasy_count``, ``years_back``, ``window_weeks``,
+    ``max_minutes``, ``collection``. The response is the dict from
+    ``gather_planning_inputs`` - history, collections, prompt - for ``generate``.
     """
     if req.method not in ("GET", "POST"):
         return https_fn.Response("Method not allowed", status=405)
@@ -151,6 +151,7 @@ def _params(req: https_fn.Request) -> dict:
     clamp("years_back", 1, 6)
     clamp("window_weeks", 0, 8)
     clamp("max_minutes", 10, 600)
+    clamp("weeks_ahead", 1, 8)
 
     collection = req.args.get("collection", body.get("collection"))
     if isinstance(collection, str):

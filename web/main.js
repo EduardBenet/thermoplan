@@ -7,6 +7,7 @@ registerSW({ immediate: true })
 const app = document.querySelector('#app')
 
 const DEFAULTS = {
+  weeks_ahead: 1,
   years_back: 3,
   window_weeks: 3,
   max_minutes: 90,
@@ -34,10 +35,17 @@ onUser((user) => set({ user, phase: 'idle', inputs: null, prompt: '', menu: '' }
 function render() {
   app.innerHTML = `
     <main class="shell">
+      <header class="topbar">
+        ${
+          state.user
+            ? `<span class="who">${escapeHtml(state.user.email)} · <button id="signout" class="link" type="button">sign out</button></span>`
+            : `<button id="signin" type="button" class="signin">Sign in with Google</button>`
+        }
+      </header>
       <div class="mark" aria-hidden="true"><img src="/favicon.svg" width="56" height="56" alt="" /></div>
       <h1>Thermoplan</h1>
       <p class="tag">Weekly menu planner for Cookidoo</p>
-      ${state.user ? signedIn() : `<button id="signin" type="button">Sign in with Google</button>`}
+      ${state.user ? signedIn() : ''}
       <p id="status" class="note"></p>
     </main>
   `
@@ -52,7 +60,7 @@ function signedIn() {
       ? 'Fetching…'
       : 'Generating…'
     : idle
-      ? "Fetch next week's inputs"
+      ? 'Fetch inputs'
       : 'Generate menu'
 
   return `
@@ -69,7 +77,8 @@ function signedIn() {
 
     ${
       idle
-        ? `<details class="settings">
+        ? `<label class="week">Week${weekSelect(s.weeks_ahead)}</label>
+           <details class="settings">
              <summary>Settings</summary>
              <label>Years back<input data-k="years_back" type="number" min="1" max="6" value="${s.years_back}" /></label>
              <label>Window ± weeks<input data-k="window_weeks" type="number" min="0" max="8" value="${s.window_weeks}" /></label>
@@ -94,9 +103,28 @@ function signedIn() {
            <textarea id="menu" rows="18" spellcheck="false">${escapeHtml(state.menu)}</textarea>`
         : ''
     }
-
-    <p class="who">${escapeHtml(state.user.email)} · <button id="signout" class="link" type="button">sign out</button></p>
   `
+}
+
+function weekSelect(selected) {
+  const now = new Date()
+  const toMonday = (8 - now.getDay()) % 7 || 7
+  const opts = []
+  for (let w = 1; w <= 6; w++) {
+    const mon = new Date(now)
+    mon.setDate(now.getDate() + toMonday + 7 * (w - 1))
+    const sun = new Date(mon)
+    sun.setDate(mon.getDate() + 6)
+    const prefix = w === 1 ? 'Next week' : `In ${w} weeks`
+    opts.push(
+      `<option value="${w}"${w === selected ? ' selected' : ''}>${prefix} · ${fmtDay(mon)}–${fmtDay(sun)}</option>`,
+    )
+  }
+  return `<select data-k="weeks_ahead">${opts.join('')}</select>`
+}
+
+function fmtDay(d) {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 function counts(d) {
@@ -120,9 +148,10 @@ function wire() {
 
   document.querySelector('#signout').addEventListener('click', () => signOutUser())
 
-  document.querySelectorAll('.settings input').forEach((el) =>
+  document.querySelectorAll('[data-k]').forEach((el) =>
     el.addEventListener('input', () => {
-      state.settings[el.dataset.k] = el.type === 'number' ? Number(el.value) : el.value
+      const k = el.dataset.k
+      state.settings[k] = k === 'collection' ? el.value : Number(el.value)
     }),
   )
   document.querySelector('#prompt')?.addEventListener('input', (e) => (state.prompt = e.target.value))
