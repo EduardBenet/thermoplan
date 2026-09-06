@@ -31,10 +31,10 @@ body {
   background: var(--bg);
   color: var(--ink);
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  display: grid;
-  place-items: start center;
-  /* Fluid side gutters: ~6px on a phone, up to 24px on a wide screen. No
-     breakpoint to miss, so narrow viewports always get the real estate back. */
+  /* Plain block layout on purpose. With `display: grid` the single implicit
+     column is `auto`, and .shell's `width: 100%` resolves against an indefinite
+     size during intrinsic sizing - so the card got sized by its own content and
+     changed width between phases. Block + margin-inline:auto is deterministic. */
   padding-block: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-bottom));
   padding-inline: max(clamp(6px, 2vw, 24px), env(safe-area-inset-left))
     max(clamp(6px, 2vw, 24px), env(safe-area-inset-right));
@@ -43,12 +43,18 @@ body {
 .shell {
   width: 100%;
   max-width: 640px;
+  margin-inline: auto;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding-block: 14px 32px;
   padding-inline: clamp(12px, 3vw, 24px);
   text-align: center;
+}
+
+/* Long recipe names / ids must never widen the layout */
+.shell {
+  overflow-wrap: anywhere;
 }
 
 .topbar {
