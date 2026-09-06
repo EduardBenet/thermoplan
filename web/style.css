@@ -144,7 +144,8 @@ button + .note {
 
 .actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 4px;
 }
 
 .actions #primary {
@@ -153,13 +154,22 @@ button + .note {
 
 .icon {
   flex: none;
-  width: 46px;
-  padding: 12px 0;
-  font-size: 1.1rem;
+  width: auto;
+  padding: 0 6px;
+  font-size: 1.15rem;
   line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.icon:hover {
   color: var(--ink);
-  background: var(--card);
-  border: 1px solid var(--border);
+}
+
+.icon:disabled {
+  opacity: 0.3;
 }
 
 .counts {
