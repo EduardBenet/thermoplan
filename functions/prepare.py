@@ -23,7 +23,7 @@ WINDOW_WEEKS = 3      # +/- weeks around the same week last year
 MAX_MINUTES = 90      # fantasy picks have to fit in an evening, total time
 
 # The collection to draw from. Set the name here, or leave None to skip.
-COLLECTION = "lunchbox"
+COLLECTION = "Lunchbox"
 
 # The For You page renders its suggestions server-side into these chunks; the
 # chunks parameter is required or the endpoint 502s

@@ -30,6 +30,9 @@ set_global_options(region="europe-west1", max_instances=1)
     secrets=["COOKIDOO_EMAIL", "COOKIDOO_PASSWORD", "ALLOWED_EMAILS"],
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
+    # Cloud Run must accept the unauthenticated call from Hosting's rewrite proxy;
+    # _check_caller does the real access control (allow-listed Firebase token).
+    invoker="public",
 )
 def prepare(req: https_fn.Request) -> https_fn.Response:
     """Fetch next week's Cookidoo planning inputs and return them as JSON.
