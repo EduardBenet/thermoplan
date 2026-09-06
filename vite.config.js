@@ -11,6 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
+        // Pins the app's identity. Without it the identity is derived from
+        // start_url, so changing start_url would look like a different app.
+        id: '/',
         name: 'Thermoplan',
         short_name: 'Thermoplan',
         description: "Weekly menu planner",
