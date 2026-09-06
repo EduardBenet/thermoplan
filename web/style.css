@@ -43,7 +43,7 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 32px 24px;
+  padding: 14px 24px 32px;
   text-align: center;
 }
 
@@ -51,8 +51,7 @@ body {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  min-height: 30px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .topbar .who {
