@@ -15,6 +15,14 @@ const DEFAULTS = {
   collection: 'Lunchbox',
 }
 
+const SOURCE_LABEL = {
+  already_planned: 'locked',
+  history: 'history',
+  collections: 'collection',
+  fantasy: 'fantasy',
+  other: 'new',
+}
+
 const state = {
   user: null,
   phase: 'idle', // idle -> ready -> done
@@ -22,30 +30,34 @@ const state = {
   settings: { ...DEFAULTS },
   inputs: null,
   prompt: '',
-  menu: '',
+  menu: null, // { days: [{ date, weekday, meals: [{ _id, meal, recipe_name, recipe_id, source, note }] }] }
 }
+
+let entrySeq = 0
 
 function set(patch) {
   Object.assign(state, patch)
   render()
 }
 
-onUser((user) => set({ user, phase: 'idle', inputs: null, prompt: '', menu: '' }))
+onUser((user) => set({ user, phase: 'idle', inputs: null, prompt: '', menu: null }))
 
 function render() {
   app.innerHTML = `
     <main class="shell">
-      <header class="topbar">
-        ${
-          state.user
-            ? `<span class="who">${escapeHtml(state.user.email)} · <button id="signout" class="link" type="button">sign out</button></span>`
-            : `<button id="signin" type="button" class="signin">Sign in with Google</button>`
-        }
-      </header>
+      ${
+        state.user
+          ? `<header class="topbar"><span class="who">${escapeHtml(state.user.email)} · <button id="signout" class="link" type="button">sign out</button></span></header>`
+          : ''
+      }
       <div class="mark" aria-hidden="true"><img src="/favicon.svg" width="56" height="56" alt="" /></div>
       <h1>Thermoplan</h1>
       <p class="tag">Weekly menu planner for Cookidoo</p>
-      ${state.user ? signedIn() : ''}
+      ${
+        state.user
+          ? signedIn()
+          : `<button id="signin" type="button">Sign in with Google</button>`
+      }
       <p id="status" class="note"></p>
     </main>
   `
@@ -93,16 +105,13 @@ function signedIn() {
     ${
       idle
         ? ''
-        : `<label class="field-label" for="prompt">Prompt</label>
-           <textarea id="prompt" rows="14" spellcheck="false">${escapeHtml(state.prompt)}</textarea>`
+        : `<details class="prompt-box"${state.menu ? '' : ' open'}>
+             <summary>Prompt</summary>
+             <textarea id="prompt" rows="14" spellcheck="false">${escapeHtml(state.prompt)}</textarea>
+           </details>`
     }
 
-    ${
-      state.menu
-        ? `<label class="field-label" for="menu">Menu</label>
-           <textarea id="menu" rows="18" spellcheck="false">${escapeHtml(state.menu)}</textarea>`
-        : ''
-    }
+    ${state.menu ? gallery(state.menu) : ''}
   `
 }
 
@@ -138,6 +147,36 @@ function counts(d) {
     </ul>`
 }
 
+function gallery(menu) {
+  const days = (menu.days || [])
+    .map(
+      (day) => `
+      <section class="day">
+        <h3>${escapeHtml(day.weekday || '')} <span>${escapeHtml(day.date || '')}</span></h3>
+        <div class="cards">
+          ${
+            (day.meals || []).map(card).join('') ||
+            `<p class="empty">nothing planned</p>`
+          }
+        </div>
+      </section>`,
+    )
+    .join('')
+  return `<div class="gallery">${days}</div>`
+}
+
+function card(m) {
+  const src = SOURCE_LABEL[m.source] || m.source || ''
+  return `
+    <article class="card">
+      <button class="card-x" data-remove="${m._id}" title="Remove" aria-label="Remove">×</button>
+      <span class="card-meal">${escapeHtml(m.meal || '')}</span>
+      <span class="card-name">${escapeHtml(m.recipe_name || '')}</span>
+      ${m.note ? `<span class="card-note">${escapeHtml(m.note)}</span>` : ''}
+      <span class="card-src src-${escapeHtml(m.source || 'other')}">${escapeHtml(src)}</span>
+    </article>`
+}
+
 function wire() {
   if (!state.user) {
     document
@@ -155,15 +194,23 @@ function wire() {
     }),
   )
   document.querySelector('#prompt')?.addEventListener('input', (e) => (state.prompt = e.target.value))
-  document.querySelector('#menu')?.addEventListener('input', (e) => (state.menu = e.target.value))
+
+  document.querySelectorAll('[data-remove]').forEach((el) =>
+    el.addEventListener('click', () => removeEntry(Number(el.dataset.remove))),
+  )
 
   document
     .querySelector('#reset')
-    ?.addEventListener('click', () => set({ phase: 'idle', inputs: null, prompt: '', menu: '' }))
+    ?.addEventListener('click', () => set({ phase: 'idle', inputs: null, prompt: '', menu: null }))
 
   document
     .querySelector('#primary')
     .addEventListener('click', () => (state.phase === 'idle' ? fetchInputs() : generate()))
+}
+
+function removeEntry(id) {
+  for (const day of state.menu.days) day.meals = (day.meals || []).filter((m) => m._id !== id)
+  render()
 }
 
 async function apiPost(path, body) {
@@ -187,7 +234,7 @@ async function fetchInputs() {
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
     const d = JSON.parse(text)
-    set({ busy: false, phase: 'ready', inputs: d, prompt: d.prompt, menu: '' })
+    set({ busy: false, phase: 'ready', inputs: d, prompt: d.prompt, menu: null })
     status(`Week of ${d.week_of}`)
   } catch (e) {
     set({ busy: false })
@@ -209,12 +256,18 @@ async function generate() {
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
     const { menu } = JSON.parse(text)
-    set({ busy: false, phase: 'done', menu })
+    set({ busy: false, phase: 'done', menu: withIds(menu) })
     status('')
   } catch (e) {
     set({ busy: false })
     status(`Failed — ${e.message}`)
   }
+}
+
+function withIds(menu) {
+  for (const day of menu.days || [])
+    for (const m of day.meals || []) m._id = ++entrySeq
+  return menu
 }
 
 function status(t) {

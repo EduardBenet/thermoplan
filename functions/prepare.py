@@ -312,6 +312,10 @@ def build_prompt(monday, fantasy_count, already_planned, fantasy=None,
         "that day. Infer lunch or dinner from the dish itself.",
         "Days missing from the history were never recorded. That is missing "
         "data, not a day we did not cook - draw no conclusion from a gap.",
+        "Lunch and dinner are the base slots for a day, but a day can hold MORE "
+        "than two recipes - a starter and a main, a side dish, an extra portion "
+        "batch-cooked. Add extras only where the history or a locked day clearly "
+        "shows it; don't pad every day to three.",
     ]
 
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
@@ -337,8 +341,11 @@ Build next week's menu. Fill every slot below - {total} meals in total.{pinned_n
 
 ## Output
 
-For each slot give: date, weekday, meal, recipe id, recipe name, and either
-ALREADY PLANNED or which input dataset it came from.
+Return every day of the week. For each recipe give the day (date + weekday), the
+meal it belongs to (lunch / dinner, or starter / side / extra for a day's third
+or later dish), the recipe name, the recipe id when you have one, and the source:
+`already_planned`, `history`, or `collections`. Add a short note only when it
+helps (e.g. "batch-cook Sunday, eat Monday").
 """
 
 
