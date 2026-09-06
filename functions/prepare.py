@@ -170,29 +170,48 @@ async def fetch_fantasy(cookidoo, session):
     return fantasy, no_time
 
 
+async def _find_collection(cookidoo, name):
+    """The collection named ``name``, checking custom (self-made) then managed.
+
+    A collection you create in the app is a *custom* collection; the ones you add
+    from Cookidoo's catalogue are *managed*. They have the same shape but live
+    behind different endpoints.
+    """
+    for count, get in (
+        (cookidoo.count_custom_collections, cookidoo.get_custom_collections),
+        (cookidoo.count_managed_collections, cookidoo.get_managed_collections),
+    ):
+        _total, pages = await count()
+        for page in range(pages):
+            for collection in await get(page=page):
+                if collection.name == name:
+                    return collection
+    return None
+
+
 async def fetch_collections(cookidoo):
     """Every recipe in the chosen saved collection, with its editorial context."""
     if not COLLECTION:
         return []
 
-    _total, pages = await cookidoo.count_managed_collections()
+    collection = await _find_collection(cookidoo, COLLECTION)
+    if collection is None:
+        print(f"  ! collection {COLLECTION!r} not found")
+        return []
+
     recipes = {}
-    for page in range(pages):
-        for collection in await cookidoo.get_managed_collections(page=page):
-            if collection.name != COLLECTION:
-                continue
-            for chapter in collection.chapters:
-                for r in chapter.recipes:
-                    recipes.setdefault(
-                        r.id,
-                        {
-                            "id": r.id,
-                            "name": r.name,
-                            "minutes": minutes(r.total_time),
-                            "collection": collection.name,
-                            "collection_description": collection.description,
-                        },
-                    )
+    for chapter in collection.chapters:
+        for r in chapter.recipes:
+            recipes.setdefault(
+                r.id,
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "minutes": minutes(r.total_time),
+                    "collection": collection.name,
+                    "collection_description": collection.description,
+                },
+            )
     return list(recipes.values())
 
 
