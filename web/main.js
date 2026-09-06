@@ -13,7 +13,7 @@ function render(user) {
         <img src="/favicon.svg" width="56" height="56" alt="" />
       </div>
       <h1>Thermoplan</h1>
-      <p class="tag">Weekly menu planner</p>
+      <p class="tag">Weekly menu planner for Cookidoo</p>
       ${user ? signedInControls(user) : `<button id="signin" type="button">Sign in with Google</button>`}
       <p id="status" class="note"></p>
       <section id="out" hidden></section>
