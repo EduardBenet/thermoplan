@@ -68,13 +68,24 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
     timeout_sec=180,
     memory=options.MemoryOption.MB_512,
     invoker="public",
+    # Generation regularly runs past Firebase Hosting's hard 60s rewrite
+    # timeout, so the PWA calls this function's own URL directly instead of
+    # /api/generate. That makes it cross-origin, hence the CORS allow-list.
+    cors=options.CorsOptions(
+        cors_origins=[
+            "https://thermoplan-benetmilian.web.app",
+            "https://thermoplan-benetmilian.firebaseapp.com",
+            "http://localhost:5173",
+        ],
+        cors_methods=["post", "options"],
+    ),
 )
 def generate(req: https_fn.Request) -> https_fn.Response:
     """Turn the prepared inputs into next week's menu via Gemini.
 
-    POST body: ``prompt`` (the edited planning prompt) plus the datasets it
-    refers to - ``history``, ``collections``, ``already_planned``. Returns
-    ``{"menu": "<text>"}``.
+    Called directly (not via the /api rewrite) because Hosting caps proxied
+    requests at 60s. POST body: ``prompt`` plus the datasets it refers to -
+    ``history``, ``collections``, ``already_planned``. Returns ``{"menu": {...}}``.
     """
     if req.method != "POST":
         return https_fn.Response("Method not allowed", status=405)

@@ -6,6 +6,11 @@ registerSW({ immediate: true })
 
 const app = document.querySelector('#app')
 
+// `generate` can run past Firebase Hosting's hard 60s rewrite timeout, so it is
+// called at its own URL rather than through /api/*. prepare and save stay on the
+// same-origin rewrite - they finish well inside the limit.
+const FUNCTIONS_BASE = 'https://europe-west1-thermoplan-benetmilian.cloudfunctions.net'
+
 const DEFAULTS = {
   weeks_ahead: 1,
   years_back: 3,
@@ -325,7 +330,7 @@ async function generate() {
   status('Asking the model… this can take ~30s')
   try {
     const d = state.inputs
-    const res = await apiPost('/api/generate', {
+    const res = await apiPost(`${FUNCTIONS_BASE}/generate`, {
       prompt: state.prompt,
       history: d.history,
       collections: d.collections,
