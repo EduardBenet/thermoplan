@@ -18,12 +18,11 @@ from cookidoo_api import Cookidoo
 from cookidoo_api.helpers import get_localization_options
 from cookidoo_api.types import CookidooConfig
 
+# Defaults - the request can override each of these.
 YEARS_BACK = 3        # how many previous years to look at
 WINDOW_WEEKS = 3      # +/- weeks around the same week last year
 MAX_MINUTES = 90      # fantasy picks have to fit in an evening, total time
-
-# The collection to draw from. Set the name here, or leave None to skip.
-COLLECTION = "Lunchbox"
+COLLECTION = "Lunchbox"   # saved collection to draw from; None / "" to skip
 
 # The For You page renders its suggestions server-side into these chunks; the
 # chunks parameter is required or the endpoint 502s
@@ -68,13 +67,13 @@ def next_monday(today):
     return today + timedelta(days=7 - today.weekday())
 
 
-async def fetch_history(cookidoo, target_monday):
+async def fetch_history(cookidoo, target_monday, years_back=YEARS_BACK, window_weeks=WINDOW_WEEKS):
     """Days cooked around this same week in previous years."""
     days = []
-    for y in range(1, YEARS_BACK + 1):
+    for y in range(1, years_back + 1):
         # 52 whole weeks keeps the weekday alignment intact
         anchor = target_monday - timedelta(weeks=52 * y)
-        for offset in range(-WINDOW_WEEKS, WINDOW_WEEKS + 1):
+        for offset in range(-window_weeks, window_weeks + 1):
             week = anchor + timedelta(weeks=offset)
             # Returns only the days of that week which have entries; days we
             # simply never recorded are absent, not evidence of not cooking
@@ -165,7 +164,7 @@ def parse_chunk(name, markup):
     return recipes
 
 
-async def fetch_fantasy(cookidoo, session):
+async def fetch_fantasy(cookidoo, session, max_minutes=MAX_MINUTES):
     """The For You suggestions, filtered to what fits an evening.
 
     Recipes without a published duration are dropped: the bento-grid tiles
@@ -197,7 +196,7 @@ async def fetch_fantasy(cookidoo, session):
             recipes.setdefault(recipe["id"], recipe)
 
     no_time = sum(1 for r in recipes.values() if not r["minutes"])
-    fantasy = [r for r in recipes.values() if r["minutes"] and r["minutes"] <= MAX_MINUTES]
+    fantasy = [r for r in recipes.values() if r["minutes"] and r["minutes"] <= max_minutes]
     fantasy.sort(key=lambda r: r["minutes"])
     return fantasy, no_time
 
@@ -221,14 +220,14 @@ async def _find_collection(cookidoo, name):
     return None
 
 
-async def fetch_collections(cookidoo):
+async def fetch_collections(cookidoo, name=COLLECTION):
     """Every recipe in the chosen saved collection, with its editorial context."""
-    if not COLLECTION:
+    if not name:
         return []
 
-    collection = await _find_collection(cookidoo, COLLECTION)
+    collection = await _find_collection(cookidoo, name)
     if collection is None:
-        print(f"  ! collection {COLLECTION!r} not found")
+        print(f"  ! collection {name!r} not found")
         return []
 
     recipes = {}
@@ -247,7 +246,8 @@ async def fetch_collections(cookidoo):
     return list(recipes.values())
 
 
-def build_prompt(monday, fantasy_count, already_planned):
+def build_prompt(monday, fantasy_count, already_planned,
+                 years_back=YEARS_BACK, max_minutes=MAX_MINUTES):
     """The instruction that turns the datasets into next week's menu."""
     pinned_by_date = {d["date"]: d for d in already_planned}
 
@@ -279,9 +279,9 @@ Build next week's menu. Fill every slot below - {total} meals in total.
 - the `already_planned` data - recipes already placed in next week's calendar by
   hand. Fixed - not suggestions.
 - the `history` data - what we actually cooked around this same week in the last
-  {YEARS_BACK} years. This is the basis: the menu should feel like these weeks.
+  {years_back} years. This is the basis: the menu should feel like these weeks.
 - the `collections` data - recipes we have saved and like. Mix these in freely.
-- the `fantasy` data - new suggestions from the app, all {MAX_MINUTES} minutes or
+- the `fantasy` data - new suggestions from the app, all {max_minutes} minutes or
   under, sorted fastest first.
 
 ## Rules
@@ -311,12 +311,20 @@ ALREADY PLANNED or which input dataset it came from.
 """
 
 
-async def gather_planning_inputs(fantasy_count=3):
+async def gather_planning_inputs(
+    fantasy_count=3,
+    years_back=YEARS_BACK,
+    window_weeks=WINDOW_WEEKS,
+    max_minutes=MAX_MINUTES,
+    collection=COLLECTION,
+):
     """Fetch everything next week's menu is built from and return it as data.
 
     Requires ``COOKIDOO_EMAIL`` and ``COOKIDOO_PASSWORD`` in the environment
     (bound as secrets on the function). Logs in fresh every call - there is no
-    cookie reuse in the function runtime.
+    cookie reuse in the function runtime. All planning knobs come in as
+    arguments so the request can tune them; the module constants are the
+    defaults.
     """
     fantasy_count = max(0, int(fantasy_count))
 
@@ -338,19 +346,24 @@ async def gather_planning_inputs(fantasy_count=3):
         today = datetime.today().date()
         monday = next_monday(today)
 
-        history = await fetch_history(cookidoo, monday)
-        collections = await fetch_collections(cookidoo)
-        fantasy, no_time = await fetch_fantasy(cookidoo, session)
+        history = await fetch_history(cookidoo, monday, years_back, window_weeks)
+        collections = await fetch_collections(cookidoo, collection)
+        fantasy, no_time = await fetch_fantasy(cookidoo, session, max_minutes)
         already_planned = await fetch_next_week(cookidoo, monday)
 
     return {
         "week_of": monday.isoformat(),
         "fantasy_count": fantasy_count,
+        "years_back": years_back,
+        "window_weeks": window_weeks,
+        "max_minutes": max_minutes,
         "already_planned": already_planned,
         "history": history,
         "collections": collections,
         "fantasy": fantasy,
         "fantasy_skipped_no_time": no_time,
-        "collection_name": COLLECTION,
-        "prompt": build_prompt(monday, fantasy_count, already_planned),
+        "collection_name": collection or None,
+        "prompt": build_prompt(
+            monday, fantasy_count, already_planned, years_back, max_minutes
+        ),
     }

@@ -38,9 +38,10 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
     """Fetch next week's Cookidoo planning inputs and return them as JSON.
 
     Requires ``Authorization: Bearer <Firebase ID token>`` for an allowed
-    account. Optional ``fantasy`` count (query string or JSON body), default 3.
-    The response is the dict from ``gather_planning_inputs`` - history,
-    collections, fantasy, and the built prompt - ready for the ``generate`` step.
+    account. Optional planning knobs (query string or JSON body):
+    ``fantasy_count``, ``years_back``, ``window_weeks``, ``max_minutes``,
+    ``collection``. The response is the dict from ``gather_planning_inputs`` -
+    history, collections, fantasy, and the built prompt - for the ``generate`` step.
     """
     if req.method not in ("GET", "POST"):
         return https_fn.Response("Method not allowed", status=405)
@@ -48,7 +49,7 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
         return denied
 
     try:
-        data = asyncio.run(gather_planning_inputs(_fantasy_count(req)))
+        data = asyncio.run(gather_planning_inputs(**_params(req)))
     except KeyError as err:
         # A secret / env var is missing
         return https_fn.Response(f"Missing configuration: {err}", status=500)
@@ -86,12 +87,31 @@ def _check_caller(req: https_fn.Request) -> https_fn.Response | None:
     return None
 
 
-def _fantasy_count(req: https_fn.Request) -> int:
-    """The requested fantasy-recipe count, from query string or JSON body."""
-    raw = req.args.get("fantasy")
-    if raw is None:
-        raw = (req.get_json(silent=True) or {}).get("fantasy")
-    try:
-        return max(0, int(raw))
-    except (TypeError, ValueError):
-        return 3
+def _params(req: https_fn.Request) -> dict:
+    """Planning knobs from the query string or JSON body, clamped to sane ranges.
+
+    Anything missing or unparseable falls through to ``gather_planning_inputs``'s
+    own defaults (so it is simply left out of the returned dict).
+    """
+    body = req.get_json(silent=True) or {}
+    out: dict = {}
+
+    def clamp(key, lo, hi):
+        raw = req.args.get(key, body.get(key))
+        if raw is None or raw == "":
+            return
+        try:
+            out[key] = max(lo, min(hi, int(raw)))
+        except (TypeError, ValueError):
+            pass
+
+    clamp("fantasy_count", 0, 20)
+    clamp("years_back", 1, 6)
+    clamp("window_weeks", 0, 8)
+    clamp("max_minutes", 10, 600)
+
+    collection = req.args.get("collection", body.get("collection"))
+    if isinstance(collection, str):
+        out["collection"] = collection.strip() or None
+
+    return out

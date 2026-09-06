@@ -32,8 +32,27 @@ function render(user) {
 function signedInControls(user) {
   return `
     <button id="plan" type="button">Fetch next week's inputs</button>
+    <details class="settings">
+      <summary>Settings</summary>
+      <label>Years back<input id="s-years" type="number" min="1" max="6" value="3" /></label>
+      <label>Window ± weeks<input id="s-window" type="number" min="0" max="8" value="3" /></label>
+      <label>Max minutes<input id="s-max" type="number" min="10" max="600" step="10" value="90" /></label>
+      <label>Fantasy count<input id="s-fantasy" type="number" min="0" max="20" value="3" /></label>
+      <label>Collection<input id="s-collection" type="text" value="Lunchbox" /></label>
+    </details>
     <p class="who">${escapeHtml(user.email)} · <button id="signout" class="link" type="button">sign out</button></p>
   `
+}
+
+function readSettings() {
+  const int = (id) => Number(document.querySelector(id).value)
+  return {
+    years_back: int('#s-years'),
+    window_weeks: int('#s-window'),
+    max_minutes: int('#s-max'),
+    fantasy_count: int('#s-fantasy'),
+    collection: document.querySelector('#s-collection').value.trim(),
+  }
 }
 
 function wireSignedIn() {
@@ -48,7 +67,11 @@ function wireSignedIn() {
     setStatus('Fetching from Cookidoo… this can take ~30s')
 
     try {
-      const res = await fetch('/api/prepare', { method: 'POST', headers: await authHeaders() })
+      const res = await fetch('/api/prepare', {
+        method: 'POST',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify(readSettings()),
+      })
       const text = await res.text()
       if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
 
