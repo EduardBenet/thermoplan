@@ -16,6 +16,7 @@ from firebase_admin import auth, initialize_app
 from firebase_functions import https_fn, options
 from firebase_functions.options import set_global_options
 
+from generate import generate_menu
 from prepare import gather_planning_inputs
 
 initialize_app()
@@ -58,6 +59,47 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
 
     return https_fn.Response(
         json.dumps(data, ensure_ascii=False),
+        content_type="application/json; charset=utf-8",
+    )
+
+
+@https_fn.on_request(
+    secrets=["ALLOWED_EMAILS", "GEMINI_API_KEY"],
+    timeout_sec=180,
+    memory=options.MemoryOption.MB_512,
+    invoker="public",
+)
+def generate(req: https_fn.Request) -> https_fn.Response:
+    """Turn the prepared inputs into next week's menu via Gemini.
+
+    POST body: ``prompt`` (the edited planning prompt) plus the datasets it
+    refers to - ``history``, ``collections``, ``already_planned``. Returns
+    ``{"menu": "<text>"}``.
+    """
+    if req.method != "POST":
+        return https_fn.Response("Method not allowed", status=405)
+    if (denied := _check_caller(req)) is not None:
+        return denied
+
+    body = req.get_json(silent=True) or {}
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        return https_fn.Response("Missing prompt", status=400)
+
+    try:
+        menu = generate_menu(
+            prompt,
+            body.get("history", []),
+            body.get("collections", []),
+            body.get("already_planned", []),
+        )
+    except KeyError as err:
+        return https_fn.Response(f"Missing configuration: {err}", status=500)
+    except Exception as err:
+        return https_fn.Response(f"Generation failed: {err}", status=502)
+
+    return https_fn.Response(
+        json.dumps({"menu": menu}, ensure_ascii=False),
         content_type="application/json; charset=utf-8",
     )
 

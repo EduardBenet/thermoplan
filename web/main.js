@@ -6,109 +6,191 @@ registerSW({ immediate: true })
 
 const app = document.querySelector('#app')
 
-function render(user) {
+const DEFAULTS = {
+  years_back: 3,
+  window_weeks: 3,
+  max_minutes: 90,
+  fantasy_count: 3,
+  collection: 'Lunchbox',
+}
+
+const state = {
+  user: null,
+  phase: 'idle', // idle -> ready -> done
+  busy: false,
+  settings: { ...DEFAULTS },
+  inputs: null,
+  prompt: '',
+  menu: '',
+}
+
+function set(patch) {
+  Object.assign(state, patch)
+  render()
+}
+
+onUser((user) => set({ user, phase: 'idle', inputs: null, prompt: '', menu: '' }))
+
+function render() {
   app.innerHTML = `
     <main class="shell">
-      <div class="mark" aria-hidden="true">
-        <img src="/favicon.svg" width="56" height="56" alt="" />
-      </div>
+      <div class="mark" aria-hidden="true"><img src="/favicon.svg" width="56" height="56" alt="" /></div>
       <h1>Thermoplan</h1>
       <p class="tag">Weekly menu planner for Cookidoo</p>
-      ${user ? signedInControls(user) : `<button id="signin" type="button">Sign in with Google</button>`}
+      ${state.user ? signedIn() : `<button id="signin" type="button">Sign in with Google</button>`}
       <p id="status" class="note"></p>
-      <section id="out" hidden></section>
     </main>
   `
-
-  if (user) {
-    wireSignedIn()
-  } else {
-    document
-      .querySelector('#signin')
-      .addEventListener('click', () => signIn().catch((err) => setStatus(`Sign-in failed — ${err.message}`)))
-  }
+  wire()
 }
 
-function signedInControls(user) {
+function signedIn() {
+  const s = state.settings
+  const idle = state.phase === 'idle'
+  const label = state.busy
+    ? idle
+      ? 'Fetching…'
+      : 'Generating…'
+    : idle
+      ? "Fetch next week's inputs"
+      : 'Generate menu'
+
   return `
-    <button id="plan" type="button">Fetch next week's inputs</button>
-    <details class="settings">
-      <summary>Settings</summary>
-      <label>Years back<input id="s-years" type="number" min="1" max="6" value="3" /></label>
-      <label>Window ± weeks<input id="s-window" type="number" min="0" max="8" value="3" /></label>
-      <label>Max minutes<input id="s-max" type="number" min="10" max="600" step="10" value="90" /></label>
-      <label>Fantasy count<input id="s-fantasy" type="number" min="0" max="20" value="3" /></label>
-      <label>Collection<input id="s-collection" type="text" value="Lunchbox" /></label>
-    </details>
-    <p class="who">${escapeHtml(user.email)} · <button id="signout" class="link" type="button">sign out</button></p>
+    <div class="actions">
+      <button id="primary" type="button"${state.busy ? ' disabled' : ''}>${label}</button>
+      ${
+        idle
+          ? ''
+          : `<button id="reset" type="button" class="icon" title="Start over" aria-label="Start over"${
+              state.busy ? ' disabled' : ''
+            }>⟳</button>`
+      }
+    </div>
+
+    ${
+      idle
+        ? `<details class="settings">
+             <summary>Settings</summary>
+             <label>Years back<input data-k="years_back" type="number" min="1" max="6" value="${s.years_back}" /></label>
+             <label>Window ± weeks<input data-k="window_weeks" type="number" min="0" max="8" value="${s.window_weeks}" /></label>
+             <label>Max minutes<input data-k="max_minutes" type="number" min="10" max="600" step="10" value="${s.max_minutes}" /></label>
+             <label>Collection<input data-k="collection" type="text" value="${escapeHtml(s.collection)}" /></label>
+           </details>`
+        : ''
+    }
+
+    ${state.inputs ? counts(state.inputs) : ''}
+
+    ${
+      idle
+        ? ''
+        : `<label class="field-label" for="prompt">Prompt</label>
+           <textarea id="prompt" rows="14" spellcheck="false">${escapeHtml(state.prompt)}</textarea>`
+    }
+
+    ${
+      state.menu
+        ? `<label class="field-label" for="menu">Menu</label>
+           <textarea id="menu" rows="18" spellcheck="false">${escapeHtml(state.menu)}</textarea>`
+        : ''
+    }
+
+    <p class="who">${escapeHtml(state.user.email)} · <button id="signout" class="link" type="button">sign out</button></p>
   `
 }
 
-function readSettings() {
-  const int = (id) => Number(document.querySelector(id).value)
-  return {
-    years_back: int('#s-years'),
-    window_weeks: int('#s-window'),
-    max_minutes: int('#s-max'),
-    fantasy_count: int('#s-fantasy'),
-    collection: document.querySelector('#s-collection').value.trim(),
-  }
-}
-
-function wireSignedIn() {
-  document.querySelector('#signout').addEventListener('click', () => signOutUser())
-
-  const btn = document.querySelector('#plan')
-  const out = document.querySelector('#out')
-
-  btn.addEventListener('click', async () => {
-    btn.disabled = true
-    out.hidden = true
-    setStatus('Fetching from Cookidoo… this can take ~30s')
-
-    try {
-      const res = await fetch('/api/prepare', {
-        method: 'POST',
-        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
-        body: JSON.stringify(readSettings()),
-      })
-      const text = await res.text()
-      if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
-
-      const data = JSON.parse(text)
-      setStatus(`Week of ${data.week_of}`)
-      out.innerHTML = renderData(data)
-      out.hidden = false
-    } catch (err) {
-      setStatus(`Failed — ${err.message}`)
-    } finally {
-      btn.disabled = false
-    }
-  })
-}
-
-function renderData(data) {
+function counts(d) {
   return `
     <ul class="counts">
-      <li><b>${data.already_planned.reduce((n, d) => n + d.recipes.length, 0)}</b> already planned (locked)</li>
-      <li><b>${data.history.length}</b> history days</li>
-      <li><b>${data.collections.length}</b> collection recipes${
-        data.collection_name ? ` — ${escapeHtml(data.collection_name)}` : ''
+      <li><b>${d.already_planned.reduce((n, x) => n + x.recipes.length, 0)}</b> already planned (locked)</li>
+      <li><b>${d.history.length}</b> history days</li>
+      <li><b>${d.collections.length}</b> collection recipes${
+        d.collection_name ? ` — ${escapeHtml(d.collection_name)}` : ''
       }</li>
-      <li><b>${data.fantasy.length}</b> fantasy recipes under 90 min (${data.fantasy_skipped_no_time} skipped)</li>
-    </ul>
-    <label class="prompt-label" for="prompt">Prompt — edit before generating</label>
-    <textarea id="prompt" rows="18" spellcheck="false">${escapeHtml(data.prompt)}</textarea>
-  `
+    </ul>`
 }
 
-function setStatus(text) {
+function wire() {
+  if (!state.user) {
+    document
+      .querySelector('#signin')
+      ?.addEventListener('click', () => signIn().catch((e) => status(`Sign-in failed — ${e.message}`)))
+    return
+  }
+
+  document.querySelector('#signout').addEventListener('click', () => signOutUser())
+
+  document.querySelectorAll('.settings input').forEach((el) =>
+    el.addEventListener('input', () => {
+      state.settings[el.dataset.k] = el.type === 'number' ? Number(el.value) : el.value
+    }),
+  )
+  document.querySelector('#prompt')?.addEventListener('input', (e) => (state.prompt = e.target.value))
+  document.querySelector('#menu')?.addEventListener('input', (e) => (state.menu = e.target.value))
+
+  document
+    .querySelector('#reset')
+    ?.addEventListener('click', () => set({ phase: 'idle', inputs: null, prompt: '', menu: '' }))
+
+  document
+    .querySelector('#primary')
+    .addEventListener('click', () => (state.phase === 'idle' ? fetchInputs() : generate()))
+}
+
+async function fetchInputs() {
+  set({ busy: true })
+  status('Fetching from Cookidoo… this can take ~30s')
+  try {
+    const res = await fetch('/api/prepare', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.settings),
+    })
+    const text = await res.text()
+    if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
+    const d = JSON.parse(text)
+    set({ busy: false, phase: 'ready', inputs: d, prompt: d.prompt, menu: '' })
+    status(`Week of ${d.week_of}`)
+  } catch (e) {
+    set({ busy: false })
+    status(`Failed — ${e.message}`)
+  }
+}
+
+async function generate() {
+  set({ busy: true })
+  status('Asking the model… this can take ~30s')
+  try {
+    const d = state.inputs
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: state.prompt,
+        history: d.history,
+        collections: d.collections,
+        already_planned: d.already_planned,
+      }),
+    })
+    const text = await res.text()
+    if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)
+    const { menu } = JSON.parse(text)
+    set({ busy: false, phase: 'done', menu })
+    status('')
+  } catch (e) {
+    set({ busy: false })
+    status(`Failed — ${e.message}`)
+  }
+}
+
+function status(t) {
   const el = document.querySelector('#status')
-  if (el) el.textContent = text
+  if (el) el.textContent = t
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+  return String(s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+  )
 }
-
-onUser(render)

@@ -107,20 +107,36 @@ button + .note {
   text-decoration: underline;
 }
 
-.shell:has(#out:not([hidden])) {
-  max-width: 620px;
+.shell:has(textarea) {
+  max-width: 640px;
 }
 
-#out {
-  margin-top: 20px;
-  text-align: left;
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions #primary {
+  flex: 1;
+}
+
+.icon {
+  flex: none;
+  width: 46px;
+  padding: 12px 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .counts {
-  margin: 0 0 16px;
+  margin: 16px 0;
   padding: 0;
   list-style: none;
   font-size: 0.9rem;
+  text-align: left;
 }
 
 .counts li {
@@ -166,17 +182,18 @@ button + .note {
   text-align: left;
 }
 
-.prompt-label {
+.field-label {
   display: block;
   margin: 16px 0 6px;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
+  text-align: left;
 }
 
-textarea#prompt {
+.shell textarea {
   width: 100%;
-  min-height: 340px;
+  min-height: 300px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
