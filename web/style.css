@@ -47,6 +47,20 @@ body {
   text-align: center;
 }
 
+/* Phone: reclaim the side gutters - keep the card, minimise the margins */
+@media (max-width: 480px) {
+  body {
+    padding-left: max(6px, env(safe-area-inset-left));
+    padding-right: max(6px, env(safe-area-inset-right));
+  }
+
+  .shell {
+    padding-left: 14px;
+    padding-right: 14px;
+    border-radius: 12px;
+  }
+}
+
 .topbar {
   display: flex;
   justify-content: flex-end;
