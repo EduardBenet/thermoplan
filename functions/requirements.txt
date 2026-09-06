@@ -1,5 +1,5 @@
 firebase-functions~=0.6.0
-firebase-admin>=7.0.0
+firebase-admin>=7.5.0
 aiohttp>=3.14.3
 cookidoo-api>=0.17.2
 google-genai>=1.0.0
