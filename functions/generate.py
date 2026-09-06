@@ -8,7 +8,7 @@ import os
 
 from google import genai
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.6-flash"
 
 
 def _block(name, data):
