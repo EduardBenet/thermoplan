@@ -67,14 +67,15 @@ function wireSignedIn() {
 function renderData(data) {
   return `
     <ul class="counts">
+      <li><b>${data.already_planned.reduce((n, d) => n + d.recipes.length, 0)}</b> already planned (locked)</li>
       <li><b>${data.history.length}</b> history days</li>
       <li><b>${data.collections.length}</b> collection recipes${
         data.collection_name ? ` — ${escapeHtml(data.collection_name)}` : ''
       }</li>
       <li><b>${data.fantasy.length}</b> fantasy recipes under 90 min (${data.fantasy_skipped_no_time} skipped)</li>
     </ul>
-    <details><summary>Prompt</summary><pre>${escapeHtml(data.prompt)}</pre></details>
-    <details><summary>Raw JSON</summary><pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre></details>
+    <label class="prompt-label" for="prompt">Prompt — edit before generating</label>
+    <textarea id="prompt" rows="18" spellcheck="false">${escapeHtml(data.prompt)}</textarea>
   `
 }
 

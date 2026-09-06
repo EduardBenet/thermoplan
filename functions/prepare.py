@@ -100,6 +100,38 @@ async def fetch_history(cookidoo, target_monday):
     days.sort(key=lambda d: d["date"])
     return days
 
+async def fetch_next_week(cookidoo, monday):
+    """Recipes already sitting in next week's calendar - added by hand.
+
+    These are fixed. The planner keeps them exactly where they are and fills the
+    empty slots around them.
+    """
+    week_end = monday + timedelta(days=6)
+    planned = []
+    for calday in await cookidoo.get_recipes_in_calendar_week(monday):
+        day = datetime.strptime(calday.id, "%Y-%m-%d").date()
+        if not (monday <= day <= week_end):
+            continue  # the week endpoint can spill into neighbouring weeks
+        if not calday.recipes and not calday.customer_recipe_ids:
+            continue
+        planned.append(
+            {
+                "date": calday.id,
+                "weekday": day.strftime("%A"),
+                "recipes": [
+                    {
+                        "id": r.id,
+                        "name": r.name,
+                        "minutes": minutes(r.total_time),
+                    }
+                    for r in calday.recipes
+                ],
+                "custom_recipe_ids": calday.customer_recipe_ids,
+            }
+        )
+    planned.sort(key=lambda d: d["date"])
+    return planned
+
 
 def parse_chunk(name, markup):
     """Pull the recipes out of one rendered For You chunk."""
@@ -215,8 +247,10 @@ async def fetch_collections(cookidoo):
     return list(recipes.values())
 
 
-def build_prompt(monday, fantasy_count):
-    """The instruction that turns the three datasets into next week's menu."""
+def build_prompt(monday, fantasy_count, already_planned):
+    """The instruction that turns the datasets into next week's menu."""
+    pinned_by_date = {d["date"]: d for d in already_planned}
+
     slots = []
     total = 0
     for i in range(7):
@@ -224,16 +258,26 @@ def build_prompt(monday, fantasy_count):
         meals = MEALS[day.strftime("%A")]
         total += len(meals)
         note = "  (no supper on Friday)" if day.strftime("%A") == "Friday" else ""
-        slots.append(f"- {day.strftime('%A')} {day.isoformat()}: {', '.join(meals)}{note}")
+        line = f"- {day.strftime('%A')} {day.isoformat()}: {', '.join(meals)}{note}"
+        pinned = pinned_by_date.get(day.isoformat())
+        if pinned and pinned["recipes"]:
+            names = "; ".join(r["name"] for r in pinned["recipes"])
+            line += f"\n    ALREADY PLANNED, keep exactly: {names}"
+        slots.append(line)
+
+    pinned_meals = sum(len(d["recipes"]) for d in already_planned)
 
     return f"""# Menu for {monday.isoformat()} to {(monday + timedelta(days=6)).isoformat()}
 
 Build next week's menu. Fill every slot below - {total} meals in total.
+{pinned_meals} of them are already decided (see ALREADY PLANNED below).
 
 {chr(10).join(slots)}
 
 ## Inputs
 
+- the `already_planned` data - recipes already placed in next week's calendar by
+  hand. Fixed - not suggestions.
 - the `history` data - what we actually cooked around this same week in the last
   {YEARS_BACK} years. This is the basis: the menu should feel like these weeks.
 - the `collections` data - recipes we have saved and like. Mix these in freely.
@@ -242,22 +286,28 @@ Build next week's menu. Fill every slot below - {total} meals in total.
 
 ## Rules
 
-1. Mimic the history weeks and mix those recipes with the ones from the
+1. Slots marked ALREADY PLANNED are locked. Reproduce them exactly - same recipe,
+   same day - and never replace, move or drop them. Plan only the unmarked slots,
+   and make the rest of the week work around the locked ones: no repeats, sensible
+   variety, a balanced week.
+2. A locked day lists recipes but not which meal - infer lunch or dinner from the
+   dish, then fill that day's remaining meal yourself.
+3. Mimic the history weeks and mix those recipes with the ones from the
    collection. Both are fair game for any weekday slot.
-2. Weekend meals are their own thing: base Saturday and Sunday only on the
+4. Weekend meals are their own thing: base Saturday and Sunday only on the
    Saturday and Sunday entries in the history. Do not put a weekday recipe on
    the weekend, or a weekend recipe on a weekday.
-3. Add {fantasy_count} recipes from the fantasy pool - only where they actually
+5. Add {fantasy_count} recipes from the fantasy pool - only where they actually
    make sense for that day and meal.
-4. The history records no meal slot; a day just lists the recipes cooked that
+6. The history records no meal slot; a day just lists the recipes cooked that
    day. Infer lunch or dinner from the dish itself.
-5. Days missing from the history were never recorded. That is missing data, not
+7. Days missing from the history were never recorded. That is missing data, not
    a day we did not cook - draw no conclusion from a gap.
 
 ## Output
 
-For each slot give: date, weekday, meal, recipe id, recipe name, and which of
-the three datasets it came from.
+For each slot give: date, weekday, meal, recipe id, recipe name, and either
+ALREADY PLANNED or which input dataset it came from.
 """
 
 
@@ -291,14 +341,16 @@ async def gather_planning_inputs(fantasy_count=3):
         history = await fetch_history(cookidoo, monday)
         collections = await fetch_collections(cookidoo)
         fantasy, no_time = await fetch_fantasy(cookidoo, session)
+        already_planned = await fetch_next_week(cookidoo, monday)
 
     return {
         "week_of": monday.isoformat(),
         "fantasy_count": fantasy_count,
+        "already_planned": already_planned,
         "history": history,
         "collections": collections,
         "fantasy": fantasy,
         "fantasy_skipped_no_time": no_time,
         "collection_name": COLLECTION,
-        "prompt": build_prompt(monday, fantasy_count),
+        "prompt": build_prompt(monday, fantasy_count, already_planned),
     }

@@ -39,7 +39,7 @@ jobs:
 
       - name: Deploy hosting + functions
         run: >
-          npx --yes firebase-tools@15 deploy
+          npx firebase-tools deploy
           --only hosting,functions
           --project thermoplan-benetmilian
           --non-interactive --force

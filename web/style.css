@@ -128,25 +128,22 @@ button + .note {
   border-bottom: 1px solid var(--border);
 }
 
-details {
-  font-size: 0.85rem;
-  margin-top: 8px;
-}
-
-summary {
-  cursor: pointer;
-  padding: 6px 0;
+.prompt-label {
+  display: block;
+  margin: 16px 0 6px;
+  font-size: 0.8rem;
   font-weight: 600;
+  color: var(--muted);
 }
 
-pre {
-  max-height: 340px;
-  overflow: auto;
-  margin: 4px 0 0;
+textarea#prompt {
+  width: 100%;
+  min-height: 340px;
   padding: 12px;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(127, 127, 127, 0.12);
-  font: 0.75rem/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
+  background: var(--card);
+  color: var(--ink);
+  font: 0.8rem/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  resize: vertical;
 }

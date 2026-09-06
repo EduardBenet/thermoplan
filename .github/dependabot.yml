@@ -9,13 +9,13 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Frontend build tooling (Vite + vite-plugin-pwa)
+  # npm: frontend build tooling (Vite) + firebase-tools used by the deploy workflow
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      frontend:
+      npm:
         patterns: ["*"]
 
   # Cloud Functions runtime deps — functions/requirements.txt
