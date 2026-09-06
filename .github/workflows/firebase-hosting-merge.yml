@@ -18,11 +18,18 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      # --- functions discovery needs the deployed runtime's Python ---
-      - uses: actions/setup-python@v5
+      # --- functions: firebase-tools discovers functions by importing them, so
+      #     it needs functions/venv to exist with the deps installed ---
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
       - run: sudo ln -sf "$(command -v python3)" /usr/local/bin/python3.14
+      - name: Build functions virtualenv
+        working-directory: functions
+        run: |
+          python -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
 
       # --- auth: service-account key from the repo secret ---
       - name: Write service-account key
