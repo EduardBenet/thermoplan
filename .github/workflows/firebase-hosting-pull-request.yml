@@ -26,7 +26,7 @@ jobs:
       - name: Deploy preview channel
         if: ${{ github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
         run: >
-          npx --yes firebase-tools@14 hosting:channel:deploy "pr-${{ github.event.number }}"
+          npx --yes firebase-tools@15 hosting:channel:deploy "pr-${{ github.event.number }}"
           --project thermoplan-benetmilian
           --expires 7d --non-interactive
         env:
