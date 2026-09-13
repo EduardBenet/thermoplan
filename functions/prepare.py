@@ -18,10 +18,13 @@ YEARS_BACK = 3        # how many previous years to look at
 WINDOW_WEEKS = 3      # +/- weeks around the same week last year
 MAX_MINUTES = 90      # fantasy picks have to fit in an evening, total time
 COLLECTION = "Lunchbox"   # saved collection to draw from; None / "" to skip
+FANTASY_PCT = 20      # share of the week's meal slots filled from For You
 
 # The For You page renders its suggestions server-side into these chunks; the
-# chunks parameter is required or the endpoint 502s
+# chunks parameter is required or the endpoint 502s. Only the hero carousel is
+# used - it is the personalised mix; the other stripes are themed or trending.
 CHUNKS = "hero:0,bento-grid:1,stripe-wide:2,stripe:3,stripe-wide:4,stripe:5,stripe-wide:6"
+FANTASY_CHUNK = "hero:0"
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -161,40 +164,60 @@ def parse_chunk(name, markup):
     return recipes
 
 
-async def fetch_fantasy(cookidoo, session, max_minutes=MAX_MINUTES):
-    """The For You suggestions, filtered to what fits an evening.
+async def open_website_session(cookidoo, session):
+    """Turn the API login into a Cookidoo *website* session.
 
-    Recipes without a published duration are dropped: the bento-grid tiles
-    render no time, so we cannot tell whether they fit.
+    For You is rendered by the website, which authenticates with its own session
+    cookie (``_oauth2_proxy``), not the API's bearer token - without one the
+    recommendations endpoint 502s for anonymous callers. The API login leaves a
+    CIAM SSO cookie in the shared jar, so the website's login route rides that SSO
+    straight through CIAM and back; no credentials are sent again.
+
+    Returns True when the redirect chain lands on the For You page.
     """
+    lang = cookidoo.localization.language
     url = (
-        f"{cookidoo.api_endpoint}/foundation/{cookidoo.localization.language}"
-        f"/partials/recommendations?chunks={CHUNKS}"
+        f"{cookidoo.api_endpoint}/profile/{lang}/login"
+        f"?redirectAfterLogin=%2Ffoundation%2F{lang}%2Ffor-you"
     )
-    headers = {
-        **BROWSER_HEADERS,
-        "Referer": f"{cookidoo.api_endpoint}/foundation/"
-        f"{cookidoo.localization.language}/for-you",
-    }
-    async with session.get(url, headers=headers) as r:
-        if r.status != 200:
-            # The recommender is flaky; a week without it is not fatal
-            print(f"  ! For You unavailable ({r.status})")
+    headers = {"User-Agent": BROWSER_HEADERS["User-Agent"]}
+    async with session.get(url, headers=headers, max_redirects=20) as r:
+        await r.read()
+        return r.status == 200 and str(r.url).endswith("/for-you")
+
+
+async def fetch_fantasy(cookidoo, session, max_minutes=MAX_MINUTES):
+    """This week's For You hero picks, filtered to what fits an evening.
+
+    Kept in the carousel's own order - that is the recommender's ranking. Never
+    fatal: the website side is undocumented and behind Cloudflare, so any failure
+    just means an empty pool this week.
+    """
+    lang = cookidoo.localization.language
+    try:
+        if not await open_website_session(cookidoo, session):
+            print("  ! For You: website login did not reach the For You page")
             return [], 0
-        # Served as text/html even though the body is JSON
-        chunks = await r.json(content_type=None)
 
-    recipes = {}
-    for name, markup in chunks.items():
-        if not isinstance(markup, str):
-            continue  # skips the trailing dcid
-        for recipe in parse_chunk(name, markup):
-            # A recipe can appear in several stripes; keep the first section
-            recipes.setdefault(recipe["id"], recipe)
+        url = f"{cookidoo.api_endpoint}/foundation/{lang}/partials/recommendations?chunks={CHUNKS}"
+        headers = {
+            **BROWSER_HEADERS,
+            "Referer": f"{cookidoo.api_endpoint}/foundation/{lang}/for-you",
+        }
+        async with session.get(url, headers=headers) as r:
+            if r.status != 200:
+                print(f"  ! For You unavailable ({r.status})")
+                return [], 0
+            # Served as text/html even though the body is JSON
+            chunks = await r.json(content_type=None)
+    except Exception as err:  # network, redirects, Cloudflare, bad JSON
+        print(f"  ! For You failed: {err!r}")
+        return [], 0
 
-    no_time = sum(1 for r in recipes.values() if not r["minutes"])
-    fantasy = [r for r in recipes.values() if r["minutes"] and r["minutes"] <= max_minutes]
-    fantasy.sort(key=lambda r: r["minutes"])
+    markup = chunks.get(FANTASY_CHUNK)
+    hero = parse_chunk(FANTASY_CHUNK, markup) if isinstance(markup, str) else []
+    no_time = sum(1 for r in hero if not r["minutes"])
+    fantasy = [r for r in hero if r["minutes"] and r["minutes"] <= max_minutes]
     return fantasy, no_time
 
 
@@ -280,8 +303,9 @@ def build_prompt(monday, fantasy_count, already_planned, fantasy=None,
     ]
     if has_fantasy:
         inputs.append(
-            "- the `fantasy` data - new suggestions from the app, all "
-            f"{max_minutes} minutes or under, sorted fastest first."
+            "- the `fantasy` data - this week's personalised For You picks from "
+            f"the app, all {max_minutes} minutes or under. New to us - the "
+            "adventurous part of the week."
         )
 
     rules = [
@@ -299,8 +323,10 @@ def build_prompt(monday, fantasy_count, already_planned, fantasy=None,
     ]
     if has_fantasy:
         rules.append(
-            f"Add {fantasy_count} recipes from the fantasy pool - only where "
-            "they actually make sense for that day and meal."
+            f"Include exactly {fantasy_count} different recipes from the fantasy "
+            "pool - no more, no fewer. You choose which ones and where; put each "
+            "on the day and meal it suits best. They count toward the week's "
+            "slots, never replace an ALREADY PLANNED recipe."
         )
     rules += [
         "The history records no meal slot; a day just lists the recipes cooked "
@@ -339,13 +365,24 @@ Build next week's menu. Fill every slot below - {total} meals in total.{pinned_n
 Return every day of the week. For each recipe give the day (date + weekday), the
 meal it belongs to (lunch / dinner, or starter / side / extra for a day's third
 or later dish), the recipe name, the recipe id when you have one, and the source:
-`already_planned`, `history`, or `collections`. Add a short note only when it
-helps (e.g. "batch-cook Sunday, eat Monday").
+`already_planned`, `history`, `collections`, or `fantasy`. Add a short note only
+when it helps (e.g. "batch-cook Sunday, eat Monday").
 """
 
 
+def meal_slots():
+    """How many meal slots a week has (lunch + dinner, minus Friday dinner)."""
+    return sum(len(meals) for meals in MEALS.values())
+
+
+def fantasy_quota(fantasy_pct, pool_size):
+    """Floor of the slider share of the week's slots, capped at the pool."""
+    pct = max(0, min(100, int(fantasy_pct)))
+    return min(pool_size, meal_slots() * pct // 100)
+
+
 async def gather_planning_inputs(
-    fantasy_count=3,
+    fantasy_pct=FANTASY_PCT,
     years_back=YEARS_BACK,
     window_weeks=WINDOW_WEEKS,
     max_minutes=MAX_MINUTES,
@@ -360,8 +397,6 @@ async def gather_planning_inputs(
     arguments so the request can tune them; the module constants are the
     defaults.
     """
-    fantasy_count = max(0, int(fantasy_count))
-
     async with cookidoo_client() as (cookidoo, session):
         today = datetime.today().date()
         monday = next_monday(today, weeks_ahead)
@@ -371,9 +406,13 @@ async def gather_planning_inputs(
         fantasy, no_time = await fetch_fantasy(cookidoo, session, max_minutes)
         already_planned = await fetch_next_week(cookidoo, monday)
 
+    fantasy_count = fantasy_quota(fantasy_pct, len(fantasy))
+
     return {
         "week_of": monday.isoformat(),
         "weeks_ahead": weeks_ahead,
+        "meal_slots": meal_slots(),
+        "fantasy_pct": fantasy_pct,
         "fantasy_count": fantasy_count,
         "years_back": years_back,
         "window_weeks": window_weeks,

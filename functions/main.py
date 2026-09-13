@@ -40,7 +40,7 @@ def prepare(req: https_fn.Request) -> https_fn.Response:
 
     Requires ``Authorization: Bearer <Firebase ID token>`` for an allowed
     account. Optional planning knobs (query string or JSON body): ``weeks_ahead``
-    (1 = next week), ``fantasy_count``, ``years_back``, ``window_weeks``,
+    (1 = next week), ``fantasy_pct`` (0-100), ``years_back``, ``window_weeks``,
     ``max_minutes``, ``collection``. The response is the dict from
     ``gather_planning_inputs`` - history, collections, prompt - for ``generate``.
     """
@@ -85,7 +85,8 @@ def generate(req: https_fn.Request) -> https_fn.Response:
 
     Called directly (not via the /api rewrite) because Hosting caps proxied
     requests at 60s. POST body: ``prompt`` plus the datasets it refers to -
-    ``history``, ``collections``, ``already_planned``. Returns ``{"menu": {...}}``.
+    ``history``, ``collections``, ``already_planned``, ``fantasy``. Returns
+    ``{"menu": {...}}``.
     """
     if req.method != "POST":
         return https_fn.Response("Method not allowed", status=405)
@@ -103,6 +104,7 @@ def generate(req: https_fn.Request) -> https_fn.Response:
             body.get("history", []),
             body.get("collections", []),
             body.get("already_planned", []),
+            body.get("fantasy", []),
         )
     except KeyError as err:
         return https_fn.Response(f"Missing configuration: {err}", status=500)
@@ -191,7 +193,7 @@ def _params(req: https_fn.Request) -> dict:
         except (TypeError, ValueError):
             pass
 
-    clamp("fantasy_count", 0, 20)
+    clamp("fantasy_pct", 0, 100)
     clamp("years_back", 1, 6)
     clamp("window_weeks", 0, 8)
     clamp("max_minutes", 10, 600)

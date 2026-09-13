@@ -104,15 +104,19 @@ Set per run in the UI (**Settings**), passed to `/api/prepare`:
 | Window ± weeks | 3 | Weeks either side of the target week to include |
 | Max minutes | 90 | Time cap for suggestions |
 | Collection | `Lunchbox` | Saved Cookidoo collection to draw from (blank to skip) |
+| Fantasy | 20% | Share of the week's 13 meal slots (floored) filled from your For You **hero** carousel that week — 30% → 3 recipes. Capped at the carousel size. |
 
 The module constants in `prepare.py` are the fallback defaults.
 
 ## Known limitations
 
-- **"For You" suggestions are disabled.** The old script scraped a Cookidoo
-  website endpoint that needs a browser session cookie; the headless OAuth login
-  only yields a mobile-API token, and that endpoint now 502s regardless. The
-  `fantasy` input and its prompt rule are omitted when there's no data.
+- **For You relies on the Cookidoo *website*, not the API.** Recommendations are
+  rendered by the website, which needs its own session cookie. `prepare` gets one
+  headlessly: the API login leaves a CIAM SSO cookie, and hitting the website's
+  `/profile/{lang}/login` rides that SSO back with `_oauth2_proxy` set. It's
+  undocumented and behind Cloudflare, so it can break without notice — when it
+  does, the fantasy pool is just empty and the prompt drops its rule; the rest of
+  the plan still works.
 - Cost is effectively $0 at ~1–2 runs/week (Cloud Run free tier, Gemini free
   tier, Artifact Registry cleanup policy set to 1 day). Blaze is required for
   Cloud Functions but nothing here bills at this volume.

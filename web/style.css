@@ -239,6 +239,28 @@ button + .note {
   text-align: left;
 }
 
+.settings .slider input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--green);
+}
+
+.settings .slider output {
+  flex: none;
+  width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-src.src-fantasy {
+  background: rgba(142, 68, 173, 0.16);
+  color: #8e44ad;
+}
+
 .prompt-box {
   margin-top: 16px;
   text-align: left;

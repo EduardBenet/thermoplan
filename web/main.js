@@ -16,7 +16,7 @@ const DEFAULTS = {
   years_back: 3,
   window_weeks: 3,
   max_minutes: 90,
-  fantasy_count: 3,
+  fantasy_pct: 20,
   collection: 'Lunchbox',
 }
 
@@ -24,7 +24,7 @@ const SOURCE_LABEL = {
   already_planned: 'locked',
   history: 'history',
   collections: 'collection',
-  fantasy: 'fantasy',
+  fantasy: 'for you',
   other: 'new',
 }
 
@@ -101,6 +101,10 @@ function signedIn() {
              <label>Window ± weeks<input data-k="window_weeks" type="number" min="0" max="8" value="${s.window_weeks}" /></label>
              <label>Max minutes<input data-k="max_minutes" type="number" min="10" max="600" step="10" value="${s.max_minutes}" /></label>
              <label>Collection<input data-k="collection" type="text" value="${escapeHtml(s.collection)}" /></label>
+             <label class="slider">Fantasy
+               <input data-k="fantasy_pct" type="range" min="0" max="100" step="5" value="${s.fantasy_pct}" />
+               <output data-for="fantasy_pct">${s.fantasy_pct}%</output>
+             </label>
            </details>`
         : ''
     }
@@ -154,6 +158,11 @@ function counts(d) {
       <li><b>${d.collections.length}</b> collection recipes${
         d.collection_name ? ` — ${escapeHtml(d.collection_name)}` : ''
       }</li>
+      <li>${
+        d.fantasy.length
+          ? `<b>${d.fantasy_count}</b> of ${d.fantasy.length} For You picks (${d.fantasy_pct}% of ${d.meal_slots} slots)`
+          : `<b>0</b> For You picks — couldn't reach For You this week`
+      }</li>
     </ul>`
 }
 
@@ -201,6 +210,9 @@ function wire() {
     el.addEventListener('input', () => {
       const k = el.dataset.k
       state.settings[k] = k === 'collection' ? el.value : Number(el.value)
+      // live readout without a re-render (a re-render would drop the drag)
+      const out = document.querySelector(`output[data-for="${k}"]`)
+      if (out) out.textContent = `${el.value}%`
     }),
   )
   document.querySelector('#prompt')?.addEventListener('input', (e) => (state.prompt = e.target.value))
@@ -244,6 +256,7 @@ function resolveMenu() {
   d.already_planned.forEach((day) => day.recipes.forEach((r) => add(r.id, r.name)))
   d.history.forEach((day) => day.recipes.forEach((r) => add(r.id, r.name)))
   d.collections.forEach((r) => add(r.id, r.name))
+  d.fantasy.forEach((r) => add(r.id, r.name))
 
   const byDate = {}
   const unresolved = []
@@ -335,6 +348,8 @@ async function generate() {
       history: d.history,
       collections: d.collections,
       already_planned: d.already_planned,
+      // send the pool only if the slider asks for any
+      fantasy: d.fantasy_count ? d.fantasy : [],
     })
     const text = await res.text()
     if (!res.ok) throw new Error(`${res.status} — ${text.slice(0, 300)}`)

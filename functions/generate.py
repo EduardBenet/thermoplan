@@ -62,20 +62,23 @@ def _block(name, data):
     return f"## `{name}` data\n```json\n{json.dumps(data, ensure_ascii=False)}\n```"
 
 
-def generate_menu(prompt, history, collections, already_planned):
+def generate_menu(prompt, history, collections, already_planned, fantasy=()):
     """Run the planning prompt through Gemini and return the menu as a dict.
 
-    Requires ``GEMINI_API_KEY`` in the environment (bound as a secret).
+    Requires ``GEMINI_API_KEY`` in the environment (bound as a secret). The
+    fantasy block is only sent when there is a pool - the prompt drops its rule
+    in that case too.
     """
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    contents = "\n\n".join(
-        [
-            prompt,
-            _block("already_planned", already_planned),
-            _block("history", history),
-            _block("collections", collections),
-        ]
-    )
+    blocks = [
+        prompt,
+        _block("already_planned", already_planned),
+        _block("history", history),
+        _block("collections", collections),
+    ]
+    if fantasy:
+        blocks.append(_block("fantasy", list(fantasy)))
+    contents = "\n\n".join(blocks)
     resp = client.models.generate_content(
         model=MODEL,
         contents=contents,
