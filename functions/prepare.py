@@ -18,7 +18,7 @@ YEARS_BACK = 3        # how many previous years to look at
 WINDOW_WEEKS = 3      # +/- weeks around the same week last year
 MAX_MINUTES = 90      # fantasy picks have to fit in an evening, total time
 COLLECTION = "Lunchbox"   # saved collection to draw from; None / "" to skip
-FANTASY_PCT = 20      # share of the week's meal slots filled from For You
+FANTASY_PCT = 0       # share of the week's meal slots filled from For You
 
 # The For You page renders its suggestions server-side into these chunks; the
 # chunks parameter is required or the endpoint 502s. Only the hero carousel is

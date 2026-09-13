@@ -104,7 +104,7 @@ Set per run in the UI (**Settings**), passed to `/api/prepare`:
 | Window ± weeks | 3 | Weeks either side of the target week to include |
 | Max minutes | 90 | Time cap for suggestions |
 | Collection | `Lunchbox` | Saved Cookidoo collection to draw from (blank to skip) |
-| Fantasy | 20% | Share of the week's 13 meal slots (floored) filled from your For You **hero** carousel that week — 30% → 3 recipes. Capped at the carousel size. |
+| Fantasy | 0% | Share of the week's 13 meal slots (floored) filled from your For You **hero** carousel that week — 30% → 3 recipes. Capped at the carousel size. |
 
 The module constants in `prepare.py` are the fallback defaults.
 

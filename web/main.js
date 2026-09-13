@@ -16,7 +16,7 @@ const DEFAULTS = {
   years_back: 3,
   window_weeks: 3,
   max_minutes: 90,
-  fantasy_pct: 20,
+  fantasy_pct: 0,
   collection: 'Lunchbox',
 }
 
