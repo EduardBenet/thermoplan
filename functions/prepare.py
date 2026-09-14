@@ -6,6 +6,7 @@ from the environment only, and the Cookidoo session is established fresh on each
 call - the deployed function has a read-only filesystem, so there is no cookie
 file to reuse. ``gather_planning_inputs`` is the single entry point.
 """
+
 import re
 import html
 
@@ -14,16 +15,18 @@ from datetime import datetime, timedelta
 from cookidoo_client import cookidoo_client
 
 # Defaults - the request can override each of these.
-YEARS_BACK = 3        # how many previous years to look at
-WINDOW_WEEKS = 3      # +/- weeks around the same week last year
-MAX_MINUTES = 90      # fantasy picks have to fit in an evening, total time
-COLLECTION = "Lunchbox"   # saved collection to draw from; None / "" to skip
-FANTASY_PCT = 0       # share of the week's meal slots filled from For You
+YEARS_BACK = 3  # how many previous years to look at
+WINDOW_WEEKS = 3  # +/- weeks around the same week last year
+MAX_MINUTES = 90  # fantasy picks have to fit in an evening, total time
+COLLECTION = "Lunchbox"  # saved collection to draw from; None / "" to skip
+FANTASY_PCT = 0  # share of the week's meal slots filled from For You
 
 # The For You page renders its suggestions server-side into these chunks; the
 # chunks parameter is required or the endpoint 502s. Only the hero carousel is
 # used - it is the personalised mix; the other stripes are themed or trending.
-CHUNKS = "hero:0,bento-grid:1,stripe-wide:2,stripe:3,stripe-wide:4,stripe:5,stripe-wide:6"
+CHUNKS = (
+    "hero:0,bento-grid:1,stripe-wide:2,stripe:3,stripe-wide:4,stripe:5,stripe-wide:6"
+)
 FANTASY_CHUNK = "hero:0"
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -57,7 +60,9 @@ def parse_duration(text):
         return None
     hours = re.search(r"(\d+)\s*h", text)
     mins = re.search(r"(\d+)\s*min", text)
-    return (int(hours.group(1)) * 60 if hours else 0) + (int(mins.group(1)) if mins else 0) or None
+    return (int(hours.group(1)) * 60 if hours else 0) + (
+        int(mins.group(1)) if mins else 0
+    ) or None
 
 
 def next_monday(today, weeks_ahead=1):
@@ -67,7 +72,9 @@ def next_monday(today, weeks_ahead=1):
     return coming_monday + timedelta(weeks=weeks_ahead - 1)
 
 
-async def fetch_history(cookidoo, target_monday, years_back=YEARS_BACK, window_weeks=WINDOW_WEEKS):
+async def fetch_history(
+    cookidoo, target_monday, years_back=YEARS_BACK, window_weeks=WINDOW_WEEKS
+):
     """Days cooked around this same week in previous years."""
     days = []
     for y in range(1, years_back + 1):
@@ -98,6 +105,7 @@ async def fetch_history(cookidoo, target_monday, years_back=YEARS_BACK, window_w
                 )
     days.sort(key=lambda d: d["date"])
     return days
+
 
 async def fetch_next_week(cookidoo, monday):
     """Recipes already sitting in next week's calendar - added by hand.
@@ -150,7 +158,9 @@ def parse_chunk(name, markup):
         if not (recipe_id and title):
             continue
         rating = re.search(r'core-rating__counter">([\d.]+)<', block)
-        duration = re.search(r'(?:__description-subline">|</core-rating><span>)([^<]+)<', block)
+        duration = re.search(
+            r'(?:__description-subline">|</core-rating><span>)([^<]+)<', block
+        )
         recipes.append(
             {
                 "id": recipe_id.group(1),
@@ -266,8 +276,14 @@ async def fetch_collections(cookidoo, name=COLLECTION):
     return list(recipes.values())
 
 
-def build_prompt(monday, fantasy_count, already_planned, fantasy=None,
-                 years_back=YEARS_BACK, max_minutes=MAX_MINUTES):
+def build_prompt(
+    monday,
+    fantasy_count,
+    already_planned,
+    fantasy=None,
+    years_back=YEARS_BACK,
+    max_minutes=MAX_MINUTES,
+):
     """The instruction that turns the datasets into next week's menu.
 
     The `fantasy` input and its rule are only included when there is fantasy
@@ -300,6 +316,8 @@ def build_prompt(monday, fantasy_count, already_planned, fantasy=None,
         "like these weeks.",
         "- the `collections` data - recipes we have saved and like. Mix these in "
         "freely.",
+        "Without being very strict, try to select Lunchbox items for lunches "
+        "Monday-Friday and fill the night with history recipes plus fantasy.",
     ]
     if has_fantasy:
         inputs.append(
